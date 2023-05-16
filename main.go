@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -9,68 +8,28 @@ import (
 	"os"
 
 	"github.com/nbd-wtf/go-nostr"
+	"gopkg.in/yaml.v3"
 )
 
-func GetArgs() (bool, string, string, []string) {
+func GetArgs() (bool, string, []string) {
 	var sflag = flag.Bool("s", false, "Read note from stdin")
-	var kflag = flag.String("k", "keys", "File name to keys")
-	var rflag = flag.String("r", "relays", "File name to a list of relays")
+	var cflag = flag.String("c", "config.yaml", "File name to a list of relays")
 	flag.Parse()
-	return *sflag, *kflag, *rflag, flag.Args()
+	return *sflag, *cflag, flag.Args()
 }
 
-func GetKeys(kfname string) (string, string, error) {
-	var sk string
-	var pub string
-	filep, ferr := os.Open(kfname)
-
-	if ferr != nil {
-		return "", "", ferr
-	}
-	defer filep.Close()
-
-	scanner := bufio.NewScanner(filep)
-
-	if scanner.Scan() {
-		sk = scanner.Text()
-	} else {
-		if scanner.Err() == nil {
-			return "", "", scanner.Err()
-		} else {
-			return "", "", io.EOF
-		}
-	}
-
-	scanner.Scan()
-	pub = scanner.Text()
-	if scanner.Err() != nil {
-		return "", "", scanner.Err()
-	}
-
-	return sk, pub, nil
-}
-
-func GetRelays(rfname string) ([]string, error) {
-	filep, ferr := os.Open(rfname)
-
+func GetConfig(ConfigFileName string) (map[string]interface{}, error) {
+	fp, ferr := os.Open(ConfigFileName)
 	if ferr != nil {
 		return nil, ferr
 	}
-	defer filep.Close()
-
-	var relays []string
-
-	scanner := bufio.NewScanner(filep)
-
-	for scanner.Scan() {
-		relays = append(relays, scanner.Text())
+	decoder := yaml.NewDecoder(fp)
+	var m map[string]interface{}
+	derr := decoder.Decode(&m)
+	if derr != nil {
+		return nil, derr
 	}
-
-	if scanner.Err() != nil {
-		return nil, scanner.Err()
-	} else {
-		return relays, nil
-	}
+	return m, nil
 }
 
 func ReadNoteFromFIle(filename string) (string, error) {
@@ -98,21 +57,30 @@ func ReadNoteFromFIle(filename string) (string, error) {
 }
 
 func main() {
-	mtags := nostr.Tags{}
 
-	_, kfname, rfname, files := GetArgs()
+	_, cfname, files := GetArgs()
 
-	sk, pub, kerr := GetKeys(kfname)
-	if kerr != nil {
-		fmt.Print("Key read error: ")
-		fmt.Println(kerr)
+	mcfg, cerr := GetConfig(cfname)
+	if cerr != nil {
+		fmt.Print("Config file read error: ")
+		fmt.Println(cerr)
 		return
 	}
 
-	relays, rerr := GetRelays(rfname)
-	if rerr != nil {
-		fmt.Print("Realay read error: ")
-		fmt.Println("rerr")
+	sk := mcfg["sk"].(string)
+	pub := mcfg["pk"].(string)
+
+	var relays []string
+	rls := mcfg["relays"].([]interface{})
+	for i := range rls {
+		relays = append(relays, rls[i].(string))
+	}
+
+	mtags := nostr.Tags{}
+	emjs := mcfg["emojis"].([]interface{})
+	for i := range emjs {
+		emj := emjs[i].([]interface{})
+		mtags = append(mtags, nostr.Tag{"emoji", emj[0].(string), emj[1].(string)})
 	}
 
 	var mmsg []string
