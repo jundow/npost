@@ -72,8 +72,8 @@ func main() {
 
 	var relays []string
 	rls := mcfg["relays"].([]interface{})
-	for i := range rls {
-		relays = append(relays, rls[i].(string))
+	for _, rl := range rls {
+		relays = append(relays, rl.(string))
 	}
 
 	mtags := nostr.Tags{}
